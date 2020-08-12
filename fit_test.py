@@ -28,7 +28,8 @@ pars = offset.make_params(c=np.median(yval))
 pars += peak.guess(yval, x=xval, amplitude=-0.5)
 result = model.fit(yval, pars, x=xval)
 
-
+x = [[1+1.j*1], [1+1.j*100]]
+print (np.mean(x))
 print(abs(result.values['height']))
 
 plt.plot(xval, yval)

@@ -20,13 +20,24 @@ class AlazarTech():
         self.cos_list = []
         self.sin_list = []
         
+        self.IQ_data = []
+        
     def LO_prepare(self):
         integer_list = np.arange(self.samples_per_record)  # Integer list from number of samples recorded per channel
         angle_list = (2 * np.pi * self.demod_frequency * (integer_list / self.fs))
         self.cos_list = np.cos(angle_list)
         self.sin_list = np.sin(angle_list)
+      
+    def bit2volt(self, signal):
+        return (((signal - 127.5) / 127.5) * self.channel_range)
     
     
+    def demodulate_data(self, dataA, dataB):
+        self.LO_prepare()
+        I = (self.cos_list * (dataA - 127.5) + self.sin_list * (dataB - 127.5))
+        Q = (self.sin_list * (dataA - 127.5) - self.cos_list * (dataB - 127.5))
+        return I+1.j*Q
+        
     def post_process_data(self, data):
         
         recordA = np.zeros(self.samples_per_record)
@@ -39,41 +50,55 @@ class AlazarTech():
             recordB[i] = data[i0] 
 
         s21_demod = self.demodulate_data(recordA, recordB)
+        s21_raw_mag = self.bit2volt((s21_demod) + 127.5)
         
-        s21 = np.average(s21_demod)
-        s21m = np.abs(s21)
-        s21mag = self.bit2volt(s21m + 127.5)
+        plt.figure()
+        plt.plot(s21_raw_mag)
+        #----------------------- FFT 
+        # time = np.arange(0, self.record_length, self.record_length, self.ts)
+        fft = np.fft.fft(s21_raw_mag)/len(s21_raw_mag)
+        fft = fft[range(int(len(s21_raw_mag)/2))]
         
-        s21mag_rms = np.sqrt(np.mean(self.bit2volt(np.abs(s21_demod) + 127.5)**2))
+        tpCount     = len(s21_raw_mag)
+        values      = np.arange(int(tpCount/2))
+        timePeriod  = tpCount/self.fs
+        frequencies = values/timePeriod
         
-        s21phase = np.angle(s21, deg=True)
+        plt.figure()
+        plt.plot(frequencies, 20*np.log10(abs(fft)))
         
-        I = self.bit2volt(s21.real + 127.5)
-        Q = self.bit2volt(s21.imag + 127.5)
+        #---------------------- FFT
+        
+        s21_avg = np.average(s21_demod)
+        s21m = np.abs(s21_avg)
+        s21mag = self.bit2volt(s21m + 127.5) / (3.162e-3)
+        
+        s21mag_no_offset = self.bit2volt((np.abs(s21_demod) - np.abs(s21_avg)) + 127.5) /(3.162e-3)
+        # plt.plot(s21mag_no_offset[0:len(s21mag_no_offset)-1])
+        s21mag_rms = np.sqrt(np.mean(np.abs(s21mag_no_offset[0:len(s21mag_no_offset)-5])**2)) / 2
+
+        
+        s21phase = np.angle(s21_avg, deg=True)
+        
+        I = self.bit2volt(s21_avg.real + 127.5)
+        Q = self.bit2volt(s21_avg.imag + 127.5)
         return [s21mag, s21phase, I, Q, s21mag_rms]
-    
-    
-    def bit2volt(self, signal):
-        return (((signal - 127.5) / 127.5) * self.channel_range)
-    
-    
-    def demodulate_data(self, dataA, dataB):
-        self.LO_prepare()
-        I = (self.cos_list * (dataA - 127.5) + self.sin_list * (dataB - 127.5))
-        Q = (self.sin_list * (dataA - 127.5) - self.cos_list * (dataB - 127.5))
-        return I+1.j*Q
-    
 
 
-def calc_1Dresonator(Pin, Alazar_obj):
+def calc_1Dresonator(Pin, Alazar_obj, en):
     data = None
     output = pd.DataFrame(data, columns = ['s21mag', 's21phase', 'I', 'Q', 's21mag_rms'])
-    for i in range(1,101):
-        data_x = pd.read_csv('Data\CryoRX\Pin=' + str(Pin) + 'dBm\Data (' + str(i) + ')', header = None)
-        data_x_array = data_x.to_numpy()
-        s21mag, s21phase, I, Q, s21mag_rms = Alazar_obj.post_process_data(data_x_array)
+    for i in range(1,2):
+        if en == True:
+            df_data = pd.read_csv('Data\CryoRX\Pin=' + str(Pin) + 'dBm\Data (' + str(i) + ')', header = None)
+        elif en == False:
+            df_data = pd.read_csv('Data\Standard Setup\Pin=' + str(Pin) + 'dBm\Data (' + str(i) + ')', header = None)
+
+        data_array = df_data.to_numpy()
+        s21mag, s21phase, I, Q, s21mag_rms = Alazar_obj.post_process_data(data_array)
         new_row = {'s21mag' : s21mag, 's21phase' : s21phase, 'I' : I, 'Q' : Q, 's21mag_rms' : s21mag_rms}
         output = output.append(new_row,  ignore_index=True)
+        print(i)
     return output
 
 def calc_SNR(x_val, y_val, s21mag_rms):
@@ -91,6 +116,7 @@ def calc_SNR(x_val, y_val, s21mag_rms):
 #------------------------------------
 # define setting for ADC
 #------------------------------------
+
 
 adc_param_CryoRX = {
     'name' : 'CryoRX', # For setting ...
@@ -126,6 +152,8 @@ if __name__ == "__main__":
 
     int_time_output = []
     int_time = [0.001]
+    
+    
     # for i in int_time: 
     #     adc_param_CryoRX['integrate_time'] = i
     #     alazar_cryoRX = AlazarTech(adc_param_CryoRX)
@@ -133,18 +161,24 @@ if __name__ == "__main__":
     #     int_time_output.append(output)
     
     # For RT rack
-    # int_time_output = []
-    # int_time = [0.001, 0.0001]
+
     for i in int_time: 
         adc_param_RT['integrate_time'] = i
         alazar_RT = AlazarTech(adc_param_RT)
-        output = calc_1Dresonator(-40, alazar_RT)
+        output = calc_1Dresonator(-40, alazar_RT, False) #  True for CryoRX data
         int_time_output.append(output)
     
 
     
 
-    plt.plot(v_rp1_cryoRX['# "RP1"'], int_time_output[0]["s21mag"]) 
-    plt.plot(v_rp1_cryoRX['# "RP1"'], int_time_output[1]["s21mag"])
+    # plt.plot(v_rp1_cryoRX['# "RP1"'], int_time_output[0]["s21mag"]) 
+    # plt.plot(v_rp1_cryoRX['# "RP1"'], int_time_output[1]["s21mag"])
     plt.show()
+    
+    #%%
+    # I = int_time_output[0]["I"]
+    # Q = int_time_output[0]["Q"]
+    # IQ = np.sqrt(I**2 + Q**2)
+    # alazar_RT.demodulate_data
+    
     
