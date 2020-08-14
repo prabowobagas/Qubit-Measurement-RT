@@ -1,11 +1,7 @@
 import numpy as np
-from scipy import stats
-from tqdm import tqdm_notebook as tqdm
-import qcodes
 import matplotlib.pyplot as plt
 import pandas as pd
-import matplotlib.pyplot as plt
-from lmfit.models import LorentzianModel, ConstantModel, GaussianModel
+from lmfit.models import ConstantModel, GaussianModel
 
 class AlazarTech():
     def __init__(self,param):
@@ -37,7 +33,6 @@ class AlazarTech():
         self.LO_prepare()
         I = (self.cos_list * (dataA - 127.5) + self.sin_list * (dataB - 127.5))
         Q = (self.sin_list * (dataA - 127.5) - self.cos_list * (dataB - 127.5))
-<<<<<<< HEAD
         I_volt = self.bit2volt(I + 127.5)
         Q_volt = self.bit2volt(Q + 127.5)
         return I_volt+1.j*Q_volt
@@ -45,9 +40,7 @@ class AlazarTech():
     def calc_RMS(self, signal):
         rms = np.sqrt(np.mean(np.power(signal,2)))
         return rms
-=======
-        return I+1.j*Q
->>>>>>> 15b59053757e10edfdc9e03fa4e566afc508d979
+
         
     def post_process_data(self, data):
         
@@ -60,7 +53,6 @@ class AlazarTech():
             i0 = i + self.samples_per_record
             recordB[i] = data[i0] 
 
-<<<<<<< HEAD
         IQ_volt = self.demodulate_data(recordA, recordB)
         
         IQ_avg = np.mean(IQ_volt)
@@ -74,52 +66,13 @@ class AlazarTech():
         I = IQ_avg.real
         Q = IQ_avg.imag
         return [IQ_mag, IQ_phase, I, Q, IQ_rms]
-=======
-        s21_demod = self.demodulate_data(recordA, recordB)
-        s21_raw_mag = self.bit2volt((s21_demod) + 127.5)
-        
-        plt.figure()
-        plt.plot(s21_raw_mag)
-        #----------------------- FFT 
-        # time = np.arange(0, self.record_length, self.record_length, self.ts)
-        fft = np.fft.fft(s21_raw_mag)/len(s21_raw_mag)
-        fft = fft[range(int(len(s21_raw_mag)/2))]
-        
-        tpCount     = len(s21_raw_mag)
-        values      = np.arange(int(tpCount/2))
-        timePeriod  = tpCount/self.fs
-        frequencies = values/timePeriod
-        
-        plt.figure()
-        plt.plot(frequencies, 20*np.log10(abs(fft)))
-        
-        #---------------------- FFT
-        
-        s21_avg = np.average(s21_demod)
-        s21m = np.abs(s21_avg)
-        s21mag = self.bit2volt(s21m + 127.5) / (3.162e-3)
-        
-        s21mag_no_offset = self.bit2volt((np.abs(s21_demod) - np.abs(s21_avg)) + 127.5) /(3.162e-3)
-        # plt.plot(s21mag_no_offset[0:len(s21mag_no_offset)-1])
-        s21mag_rms = np.sqrt(np.mean(np.abs(s21mag_no_offset[0:len(s21mag_no_offset)-5])**2)) / 2
-
-        
-        s21phase = np.angle(s21_avg, deg=True)
-        
-        I = self.bit2volt(s21_avg.real + 127.5)
-        Q = self.bit2volt(s21_avg.imag + 127.5)
-        return [s21mag, s21phase, I, Q, s21mag_rms]
->>>>>>> 15b59053757e10edfdc9e03fa4e566afc508d979
 
 
-def calc_1Dresonator(Pin, Alazar_obj, en):
+def calc_1Dresonator(Pin, Alazar_obj, en, int_time):
     data = None
     output = pd.DataFrame(data, columns = ['s21mag', 's21phase', 'I', 'Q', 's21mag_rms'])
-<<<<<<< HEAD
+
     for i in range(1,101):
-=======
-    for i in range(1,2):
->>>>>>> 15b59053757e10edfdc9e03fa4e566afc508d979
         if en == True:
             df_data = pd.read_csv('Data\CryoRX\Pin=' + str(Pin) + 'dBm\Data (' + str(i) + ')', header = None)
         elif en == False:
@@ -129,33 +82,18 @@ def calc_1Dresonator(Pin, Alazar_obj, en):
         s21mag, s21phase, I, Q, s21mag_rms = Alazar_obj.post_process_data(data_array)
         new_row = {'s21mag' : s21mag, 's21phase' : s21phase, 'I' : I, 'Q' : Q, 's21mag_rms' : s21mag_rms}
         output = output.append(new_row,  ignore_index=True)
-<<<<<<< HEAD
+        if i % 100 == 0:
+            print(int_time)
         
-        if i % 50 == 0:
-            print(i)
-            
-=======
-        print(i)
->>>>>>> 15b59053757e10edfdc9e03fa4e566afc508d979
     return output
 
-def calc_SNR(x_val, y_val, s21mag_rms):
-    peak = LorentzianModel()
-    offset = ConstantModel()
-    model = peak + offset
-    
-    pars = offset.make_params(c=np.median(y_val))
-    pars += peak.guess(y_val, x=x_val, amplitude=-0.5)
-    result = model.fit(y_val, pars, x=x_val)
-    SNR = np.abs((result.values['height'])**2)/s21mag_rms**2
-    return SNR
 
 def fit_s21mag(x_val, y_val):
     peak = GaussianModel()
     offset = ConstantModel()
     model = peak + offset
     pars = offset.make_params(c=np.median(y_val))
-    pars += peak.guess(y_val, x=x_val, amplitude=-0.5)
+    pars += peak.guess(y_val, x=x_val, amplitude=-0.05, center= x_val[50])
     result = model.fit(y_val, pars, x=x_val)
     return result
 
@@ -190,115 +128,100 @@ adc_param_RT = {
 #------------------------------------
 
 if __name__ == "__main__": 
+    pin = -40
     
-    v_rp1_cryoRX = pd.read_csv(
-        'Scripts and PPT Summary/CryoRX/2020-06-22/18-15-29_qtt_scan1D/RP1.dat',
-        skiprows=[0, 2], delimiter='\t'
-        ) # Take care of the DC axis, different per measurement
-    
-    # v_rp1_rt_rack = pd.read_csv(Data)
-
-
     int_time_output = []
-<<<<<<< HEAD
-    # int_time = np.logspace(np.log10(1e-5), np.log10(1e-3), 10)
-    # int_time =  np.linspace(1e-5, 1e-3), 10)
     # int_time = [10e-6, 20e-6, 40e-6, 80e-6, 160e-6, 320e-6, 640e-6, 1000e-6]
-    int_time = np.linspace(1e-5, 1e-7, 10)
+    # int_time = [8e-6, 16e-6, 32e-6, 64e-6, 128e-6, 256e-6, 512e-6, 725e-6, 819e-6, 1000e-6]
+    int_time = [4e-6, 8e-6, 16e-6, 32e-6, 64e-6, 128e-6, 256e-6, 512e-6, 1000e-6]
 
-    enable = False
-    
-    for i in int_time: 
-=======
-    int_time = [0.001]
-    
-    
-    # for i in int_time: 
-    #     adc_param_CryoRX['integrate_time'] = i
-    #     alazar_cryoRX = AlazarTech(adc_param_CryoRX)
-    #     output = calc_1Dresonator(-40, alazar_cryoRX)
-    #     int_time_output.append(output)
-    
-    # For RT rack
 
-    for i in int_time: 
-        adc_param_RT['integrate_time'] = i
-        alazar_RT = AlazarTech(adc_param_RT)
-        output = calc_1Dresonator(-40, alazar_RT, False) #  True for CryoRX data
-        int_time_output.append(output)
+    enable = True
     
->>>>>>> 15b59053757e10edfdc9e03fa4e566afc508d979
+    for idx,i in enumerate(int_time): 
 
         if enable == True:
             adc_param_CryoRX['integrate_time'] = i
             alazar_cryoRX = AlazarTech(adc_param_CryoRX)
-            output = calc_1Dresonator(-40, alazar_cryoRX, True)
+            output = calc_1Dresonator(pin, alazar_cryoRX, True, int_time[idx])
             int_time_output.append(output)
         elif enable == False:
             adc_param_RT['integrate_time'] = i
             alazar_RT = AlazarTech(adc_param_RT)
-            output = calc_1Dresonator(-40, alazar_RT, False)
+            output = calc_1Dresonator(pin, alazar_RT, False, int_time[idx])
             int_time_output.append(output)
         
 
                 
-    
 
-<<<<<<< HEAD
 # %% SNR 
+plt.close("all")
+plt.rcParams["font.weight"] = "bold"
+plt.rcParams["font.size"] = 14
+plt.rcParams["axes.labelweight"] = "bold"
+plt.rcParams["axes.labelweight"] = "bold"
+plt.rcParams["axes.linewidth"] = 2
 
-pin = -40
+
 vin_peak = 10 ** ((pin - 10) / 20) 
 
 SNR = []
 S = []
 N = []
 
+n = len(int_time_output) - 1
+col_shade = plt.cm.binary(np.linspace(0.1, 0.6, n))
+col_last = plt.cm.binary(np.linspace(1, 1, 1))
+col = np.concatenate([col_shade, col_last])
+
+
+v_rp1_cryoRX = pd.read_csv(
+    'Scripts and PPT Summary/CryoRX/2020-06-22/18-15-29_qtt_scan1D/RP1.dat',
+    skiprows=[0, 2], delimiter='\t'
+    ) # Take care of the DC axis, different per measurement
+v_rp1_RT = pd.read_csv(
+    'Scripts and PPT Summary/RT Setup/2020-06-23/09-28-33_qtt_scan1D/RP1.dat',
+skiprows=[0, 2], delimiter='\t'
+    ) # Take care of the DC axis, different per measurement
+    
+plt.figure(figsize=(5,4), dpi=150)
 for idx,output in enumerate(int_time_output):
-    v_rp = v_rp1_cryoRX['# "RP1"']
-    s21 = output["s21mag"] / vin_peak # convert s21mag (digitzed)
-    
-    # plt.plot(s21) 
+    v_rp = v_rp1_cryoRX['# "RP1"'].to_numpy()
+    s21 = output["s21mag"].to_numpy() / vin_peak # convert s21mag (digitzed)
+    if idx == len(int_time_output)-1:
+        plt.plot(v_rp, 20*np.log10(s21), linewidth=3, color=col[idx], label='t$_{int}$ = 1 ms', zorder=10) 
+    else:
+        plt.plot(v_rp, 20*np.log10(s21), linewidth=2, color=col[idx]) 
     gauss_fit = fit_s21mag(v_rp, s21)
+
     S.append(abs(gauss_fit.values['height']))
-    N.append(np.std(s21[0:15]))
+    N.append(np.std(s21[0:20]))
     SNR.append((S[idx] / N[idx])**2)
-    
 
+plt.plot(v_rp, 20*np.log10(gauss_fit.best_fit), 'r--', linewidth=2, label='Gaussian Fit', zorder=11)
 
-t_int_linspace = np.linspace(5e-7, 5e-3, 1000)
+plt.legend()
+plt.xlabel('V$_{RP} [mV]$')
+plt.ylabel('S21 [dB]') 
+
+plt.grid(color=col[1], linestyle='--', linewidth=2)
+
+t_int_linspace = np.linspace(5e-7, 5e-2, 1000)
 m, c = np.polyfit(np.log(int_time), np.log(SNR), 1) # fit log(y) = m*log(x) + c
 loglogfit = t_int_linspace**(m) * np.exp(c)
 t_min = np.exp(-c / m) 
 
-plt.figure(figsize=(8,3), dpi=150)
 
-
+plt.figure(figsize=(8,4), dpi=150)
 plt.scatter(int_time, SNR)
 plt.loglog(t_int_linspace, loglogfit, label='RT Rack Setup (11 MHz)')
 plt.legend()
-plt.text(1e-3, 8e-1, ' Pin = -40 dBm \n t$_{min}$='+str(round(t_min,2))+'$\mu$S', fontsize=12)
+plt.grid(color=col[1], linestyle='--', linewidth=2)
+plt.text(1e-4, 1e0, ' Pin = '+str(pin)+' dBm \n t$_{min}$='+str(round(t_min*1e6,2))+'$\mu$S', fontsize=12)
+
 plt.xlabel('t$_{int}$')
 plt.ylabel('SNR (a.u)') 
-# ax.text(2, 6, r'an equation: $E=mc^2$', fontsize=15)
-# fig = plt.figure()
-# ax = plt.gca()
-# plt.plot(int_time, y_fit, ':')
-# plt.loglog(int_time, SNR)
-# plt.scatter(int_time, SNR)
-# ax.ylim([1e0, 1e4])
+plt.xlim([2e-6, 2e-3])
+
 
     
-=======
-    # plt.plot(v_rp1_cryoRX['# "RP1"'], int_time_output[0]["s21mag"]) 
-    # plt.plot(v_rp1_cryoRX['# "RP1"'], int_time_output[1]["s21mag"])
-    plt.show()
-    
-    #%%
-    # I = int_time_output[0]["I"]
-    # Q = int_time_output[0]["Q"]
-    # IQ = np.sqrt(I**2 + Q**2)
-    # alazar_RT.demodulate_data
-    
-    
->>>>>>> 15b59053757e10edfdc9e03fa4e566afc508d979
