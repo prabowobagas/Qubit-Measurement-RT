@@ -37,6 +37,7 @@ class AlazarTech():
         self.LO_prepare()
         I = (self.cos_list * (dataA - 127.5) + self.sin_list * (dataB - 127.5))
         Q = (self.sin_list * (dataA - 127.5) - self.cos_list * (dataB - 127.5))
+<<<<<<< HEAD
         I_volt = self.bit2volt(I + 127.5)
         Q_volt = self.bit2volt(Q + 127.5)
         return I_volt+1.j*Q_volt
@@ -44,6 +45,9 @@ class AlazarTech():
     def calc_RMS(self, signal):
         rms = np.sqrt(np.mean(np.power(signal,2)))
         return rms
+=======
+        return I+1.j*Q
+>>>>>>> 15b59053757e10edfdc9e03fa4e566afc508d979
         
     def post_process_data(self, data):
         
@@ -56,6 +60,7 @@ class AlazarTech():
             i0 = i + self.samples_per_record
             recordB[i] = data[i0] 
 
+<<<<<<< HEAD
         IQ_volt = self.demodulate_data(recordA, recordB)
         
         IQ_avg = np.mean(IQ_volt)
@@ -69,12 +74,52 @@ class AlazarTech():
         I = IQ_avg.real
         Q = IQ_avg.imag
         return [IQ_mag, IQ_phase, I, Q, IQ_rms]
+=======
+        s21_demod = self.demodulate_data(recordA, recordB)
+        s21_raw_mag = self.bit2volt((s21_demod) + 127.5)
+        
+        plt.figure()
+        plt.plot(s21_raw_mag)
+        #----------------------- FFT 
+        # time = np.arange(0, self.record_length, self.record_length, self.ts)
+        fft = np.fft.fft(s21_raw_mag)/len(s21_raw_mag)
+        fft = fft[range(int(len(s21_raw_mag)/2))]
+        
+        tpCount     = len(s21_raw_mag)
+        values      = np.arange(int(tpCount/2))
+        timePeriod  = tpCount/self.fs
+        frequencies = values/timePeriod
+        
+        plt.figure()
+        plt.plot(frequencies, 20*np.log10(abs(fft)))
+        
+        #---------------------- FFT
+        
+        s21_avg = np.average(s21_demod)
+        s21m = np.abs(s21_avg)
+        s21mag = self.bit2volt(s21m + 127.5) / (3.162e-3)
+        
+        s21mag_no_offset = self.bit2volt((np.abs(s21_demod) - np.abs(s21_avg)) + 127.5) /(3.162e-3)
+        # plt.plot(s21mag_no_offset[0:len(s21mag_no_offset)-1])
+        s21mag_rms = np.sqrt(np.mean(np.abs(s21mag_no_offset[0:len(s21mag_no_offset)-5])**2)) / 2
+
+        
+        s21phase = np.angle(s21_avg, deg=True)
+        
+        I = self.bit2volt(s21_avg.real + 127.5)
+        Q = self.bit2volt(s21_avg.imag + 127.5)
+        return [s21mag, s21phase, I, Q, s21mag_rms]
+>>>>>>> 15b59053757e10edfdc9e03fa4e566afc508d979
 
 
 def calc_1Dresonator(Pin, Alazar_obj, en):
     data = None
     output = pd.DataFrame(data, columns = ['s21mag', 's21phase', 'I', 'Q', 's21mag_rms'])
+<<<<<<< HEAD
     for i in range(1,101):
+=======
+    for i in range(1,2):
+>>>>>>> 15b59053757e10edfdc9e03fa4e566afc508d979
         if en == True:
             df_data = pd.read_csv('Data\CryoRX\Pin=' + str(Pin) + 'dBm\Data (' + str(i) + ')', header = None)
         elif en == False:
@@ -84,10 +129,14 @@ def calc_1Dresonator(Pin, Alazar_obj, en):
         s21mag, s21phase, I, Q, s21mag_rms = Alazar_obj.post_process_data(data_array)
         new_row = {'s21mag' : s21mag, 's21phase' : s21phase, 'I' : I, 'Q' : Q, 's21mag_rms' : s21mag_rms}
         output = output.append(new_row,  ignore_index=True)
+<<<<<<< HEAD
         
         if i % 50 == 0:
             print(i)
             
+=======
+        print(i)
+>>>>>>> 15b59053757e10edfdc9e03fa4e566afc508d979
     return output
 
 def calc_SNR(x_val, y_val, s21mag_rms):
@@ -151,6 +200,7 @@ if __name__ == "__main__":
 
 
     int_time_output = []
+<<<<<<< HEAD
     # int_time = np.logspace(np.log10(1e-5), np.log10(1e-3), 10)
     # int_time =  np.linspace(1e-5, 1e-3), 10)
     # int_time = [10e-6, 20e-6, 40e-6, 80e-6, 160e-6, 320e-6, 640e-6, 1000e-6]
@@ -159,6 +209,25 @@ if __name__ == "__main__":
     enable = False
     
     for i in int_time: 
+=======
+    int_time = [0.001]
+    
+    
+    # for i in int_time: 
+    #     adc_param_CryoRX['integrate_time'] = i
+    #     alazar_cryoRX = AlazarTech(adc_param_CryoRX)
+    #     output = calc_1Dresonator(-40, alazar_cryoRX)
+    #     int_time_output.append(output)
+    
+    # For RT rack
+
+    for i in int_time: 
+        adc_param_RT['integrate_time'] = i
+        alazar_RT = AlazarTech(adc_param_RT)
+        output = calc_1Dresonator(-40, alazar_RT, False) #  True for CryoRX data
+        int_time_output.append(output)
+    
+>>>>>>> 15b59053757e10edfdc9e03fa4e566afc508d979
 
         if enable == True:
             adc_param_CryoRX['integrate_time'] = i
@@ -175,6 +244,7 @@ if __name__ == "__main__":
                 
     
 
+<<<<<<< HEAD
 # %% SNR 
 
 pin = -40
@@ -219,3 +289,16 @@ plt.ylabel('SNR (a.u)')
 # ax.ylim([1e0, 1e4])
 
     
+=======
+    # plt.plot(v_rp1_cryoRX['# "RP1"'], int_time_output[0]["s21mag"]) 
+    # plt.plot(v_rp1_cryoRX['# "RP1"'], int_time_output[1]["s21mag"])
+    plt.show()
+    
+    #%%
+    # I = int_time_output[0]["I"]
+    # Q = int_time_output[0]["Q"]
+    # IQ = np.sqrt(I**2 + Q**2)
+    # alazar_RT.demodulate_data
+    
+    
+>>>>>>> 15b59053757e10edfdc9e03fa4e566afc508d979
