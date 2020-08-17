@@ -105,7 +105,7 @@ def fit_s21mag(x_val, y_val):
 
 def calc_SNR(int_time_output, pin, Alazar_setting, int_time):
     
-    plt.close("all")
+    # plt.close("all")
     plt.rcParams["font.weight"] = "bold"
     plt.rcParams["font.size"] = 14
     plt.rcParams["axes.labelweight"] = "bold"
@@ -137,7 +137,6 @@ def calc_SNR(int_time_output, pin, Alazar_setting, int_time):
     
     #Plotting the traces for different t_int time
     plt.figure(figsize=(5,4), dpi=150)
-    
     for idx,output in enumerate(int_time_output):
         s21 = output["s21mag"].to_numpy() / vin_peak # convert s21mag (digitzed)
         if idx == len(int_time_output) - 1:
@@ -215,7 +214,7 @@ int_time_output = []
 # int_time = [8e-6, 16e-6, 32e-6, 62e-6, 124e-6, 248e-6, 496e-6, 992e-6] # Good values for SNR calculation
 
 # int_time = np.around(np.logspace(np.log10(5e-6), np.log10(1e-3), 5), 6).tolist() # More sweep points
-int_time = np.around(np.logspace(np.log10(5e-6), np.log10(1e-3), 3), 6) # More sweep points
+int_time = np.around(np.logspace(np.log10(5e-6), np.log10(1e-3), 10), 6) # More sweep points
 
 # int_time = np.round(np.logspace(np.log10(1e-6), np.log10(1e-3), 5, base=10),6)
  
@@ -229,9 +228,6 @@ SNR_RT = calc_SNR(int_time_output_RT, pin, adc_param_RT, int_time)
 
 SNR_fit_Cryocmos, t_min_CryoCMOS = SNR_Linear_Fitting(SNR_CryoCMOS)
 SNR_fit_RT, t_min_RT = SNR_Linear_Fitting(SNR_RT)
-
-
-
 
 plt.figure(figsize=(5,4), dpi=150)
 plt.loglog(SNR_fit_Cryocmos[2],SNR_fit_Cryocmos[3], label='SNR Cryo')
