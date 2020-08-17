@@ -58,7 +58,7 @@ class AlazarTech():
         IQ_avg = np.mean(IQ_volt)
         IQ_mag = np.abs(IQ_avg)
         
-        IQ_rms = np.sqrt(np.std(IQ_volt.real)**2 + np.std(IQ_volt.imag)**2)
+        IQ_rms = np.sqrt(np.std(IQ_volt.real[0:999])**2 + np.std(IQ_volt.imag[0:999])**2)
 
         
         IQ_phase = np.angle(IQ_avg, deg=True)
@@ -87,13 +87,13 @@ def calc_1Dresonator(Pin, Alazar_obj, en, int_time):
         
     return output
 
-
 def fit_s21mag(x_val, y_val):
+    x_val_midpoint = int(np.round(len(x_val)/2))
     peak = GaussianModel()
     offset = ConstantModel()
     model = peak + offset
     pars = offset.make_params(c=np.median(y_val))
-    pars += peak.guess(y_val, x=x_val, amplitude=-0.05, center= x_val[50])
+    pars += peak.guess(y_val, x=x_val, amplitude=-0.05, center= x_val[x_val_midpoint])
     result = model.fit(y_val, pars, x=x_val)
     return result
 
@@ -103,13 +103,14 @@ def fit_s21mag(x_val, y_val):
 #------------------------------------
 
 
+
 adc_param_CryoRX = {
     'name' : 'CryoRX', # For setting ...
     'sampling_rate' : 1e9, # samples/s
     'record_length' : 0.001, # in (s)
     'channel_range' : 0.1, # in (v)
     'demodulation_frequency' : 100e6, # in (Hz)
-    'integrate_time' : 0.001 # Must be less than 1ms for our case (Data limited)
+    'integrate_time' : 0.001 # Must be less than 1ms for our case (Data only until 1ms)
     }
 
 
@@ -131,18 +132,13 @@ pin = -40
 vin_peak = 10 ** ((pin - 10) / 20) 
 
 int_time_output = []
-# int_time = [10e-6, 20e-6, 40e-6, 80e-6, 160e-6, 320e-6, 640e-6, 1000e-6]
-# int_time = [8e-6, 16e-6, 32e-6, 64e-6, 128e-6, 256e-6, 512e-6, 725e-6, 819e-6, 1000e-6]
-int_time = [8e-6, 16e-6, 32e-6, 62e-6, 124e-6, 248e-6, 496e-6, 992e-6] # Good values for SNR calculation
-int_time = np.logspace(np.log(50e-6), np.log(992e-6), 20)
-# int_time = [5e-6, 25e-6, 50e-6, 100-6, 500e-6, 956e-6]
-# int_time = [8e-6, 11e-6, 18e-6, 32e-6, 64e-6, 128e-6, 256e-6, 312e-6, 512e-6, 712e-6,  1000e-6]
+# int_time = [8e-6, 16e-6, 32e-6, 62e-6, 124e-6, 248e-6, 496e-6, 992e-6] # Good values for SNR calculation
+int_time = np.around(np.logspace(np.log10(5e-6), np.log10(1e-3), 15), 6) # More sweep points
 # int_time = np.round(np.logspace(np.log10(1e-6), np.log10(1e-3), 5, base=10),6)
-
-enable = True
+ 
+enable = True # Set to true for CMOS data, set to False for RT environemnet
 
 for idx,i in enumerate(int_time): 
-
     if enable == True:
         adc_param_CryoRX['integrate_time'] = i
         alazar_cryoRX = AlazarTech(adc_param_CryoRX)
@@ -153,11 +149,12 @@ for idx,i in enumerate(int_time):
         alazar_RT = AlazarTech(adc_param_RT)
         output = calc_1Dresonator(pin, alazar_RT, False, int_time[idx])
         int_time_output.append(output)
-    
+        
 
                 
 
 # %% SNR Calculation
+
 plt.close("all")
 plt.rcParams["font.weight"] = "bold"
 plt.rcParams["font.size"] = 14
@@ -180,29 +177,37 @@ if enable == True:
         'Scripts and PPT Summary/CryoRX/2020-06-22/18-15-29_qtt_scan1D/RP1.dat',
         skiprows=[0, 2], delimiter='\t')
     v_rp = v_rp_cmos['# "RP1"'].to_numpy()
-else:
+elif enable == False:
     v_rp_RT = pd.read_csv(
         'Scripts and PPT Summary/RT Setup/2020-06-23/09-28-33_qtt_scan1D/RP1.dat',
     skiprows=[0, 2], delimiter='\t')
     v_rp = v_rp_RT['# "RP1"'].to_numpy()
-    
+
+
 
 # Plotting the 
 plt.figure(figsize=(5,4), dpi=150)
+
+
+
 for idx,output in enumerate(int_time_output):
     s21 = output["s21mag"].to_numpy() / vin_peak # convert s21mag (digitzed)
     if idx == len(int_time_output) - 1:
         plt.plot(v_rp, 20*np.log10(s21), linewidth=3, color=col[idx], label='t$_{int}$ = 1 ms \nPin=-40 dBm', zorder=10) 
     else:
         plt.plot(v_rp, 20*np.log10(s21), linewidth=2, color=col[idx]) 
-    gauss_fit = fit_s21mag(v_rp, s21)
+        
+        
+    gauss_fit = fit_s21mag(v_rp[10:90], s21[10:90])
 
-    S.append(abs(gauss_fit.values['height']))
-    N.append(np.std(s21[0:20])) # Noise calculated by the RMS
+    S.append(abs(gauss_fit.values['height'])) # Calculate Signal Height
+    # N.append(output) # Noise calculated by the RMS, first N data points
+    N.append(np.std(s21[75:-1])) # Noise calculated by the RMS, first N data points
     SNR.append((S[idx] / N[idx])**2)
+# plt.plot(v_rp[10:90], 20*np.log10(gauss_fit.best_fit), 'r--', linewidth=2, label='Gaussian Fit', zorder=11)
 
 
-plt.plot(v_rp, 20*np.log10(gauss_fit.best_fit), 'r--', linewidth=2, label='Gaussian Fit', zorder=11)
+
 
 plt.legend()
 plt.xlabel('V$_{RP} [mV]$')
@@ -210,8 +215,9 @@ plt.ylabel('S21 [dB]')
 # plt.ylim([-30, 0])
 plt.grid(color=col[1], linestyle='--', linewidth=2)
 
+
 t_int_linspace = np.linspace(5e-7, 5e-2, 1000)
-m, c = np.polyfit(np.log(int_time), np.log(SNR), 1) # fit log(y) = m*log(x) + c
+m, c = np.polyfit(np.log(int_time[0:-1]), np.log(SNR[0:-1]), 1) # fit log(y) = m*log(x) + c
 loglogfit = t_int_linspace**(m) * np.exp(c)
 t_min = np.exp(-c / m) 
 
@@ -228,9 +234,11 @@ plt.ylabel('SNR (a.u)')
 plt.xlim([2e-6, 2e-3])
 # plt.ylim([10e-1, 2e-4])
 # %% SNR 
-
-# df = pd.DataFrame([int_time, SNR, t_int_linspace, loglogfit])
-# df.to_csv('Data/Processed Data/RT_SNR_9points.csv')
+# # 
+df = pd.DataFrame([int_time, SNR, t_int_linspace, loglogfit])
+df.to_csv('Data/Processed Data/5e-6 to 1e-3/CryoChip_SNR.csv')
 # # df.O
+
+# Make FIR filter with N taps 10% of 1ms
 
     
