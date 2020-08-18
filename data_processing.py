@@ -236,7 +236,7 @@ plt.xlim([2e-6, 2e-3])
 # %% SNR 
 # # 
 df = pd.DataFrame([int_time, SNR, t_int_linspace, loglogfit])
-df.to_csv('Data/Processed Data/5e-6 to 1e-3/CryoChip_SNR.csv')
+df.to_csv('Data/Processed Data/5e-6 to 1e-3/CryoChip_SNR.csv', delimiter='\t')
 # # df.O
 
 # Make FIR filter with N taps 10% of 1ms

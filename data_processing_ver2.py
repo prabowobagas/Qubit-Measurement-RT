@@ -2,6 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from lmfit.models import ConstantModel, GaussianModel
+import time
 
 class AlazarTech():
     def __init__(self,param):
@@ -58,7 +59,7 @@ class AlazarTech():
         IQ_avg = np.mean(IQ_volt)
         IQ_mag = np.abs(IQ_avg)
         
-        IQ_rms = np.sqrt(np.std(IQ_volt.real[0:999])**2 + np.std(IQ_volt.imag[0:999])**2)
+        IQ_rms = np.sqrt(np.std(IQ_volt.real)**2 + np.std(IQ_volt.imag)**2)
 
         
         IQ_phase = np.angle(IQ_avg, deg=True)
@@ -157,7 +158,7 @@ def calc_SNR(int_time_output, pin, Alazar_setting, int_time):
     plt.legend()
     plt.xlabel('V$_{RP} [mV]$')
     plt.ylabel('S21 [dB]') 
-    # plt.ylim([-30, 0])
+    plt.ylim([-30, 0])
     plt.grid(color=col[1], linestyle='--', linewidth=2)
     
     SNR_output = [int_time, SNR]
@@ -206,6 +207,7 @@ adc_param_RT = {
 #------------------------------------
 # Main
 #------------------------------------
+start_time = time.time()
 
 pin = -40
 vin_peak = 10 ** ((pin - 10) / 20) 
@@ -214,7 +216,7 @@ int_time_output = []
 # int_time = [8e-6, 16e-6, 32e-6, 62e-6, 124e-6, 248e-6, 496e-6, 992e-6] # Good values for SNR calculation
 
 # int_time = np.around(np.logspace(np.log10(5e-6), np.log10(1e-3), 5), 6).tolist() # More sweep points
-int_time = np.around(np.logspace(np.log10(5e-6), np.log10(1e-3), 10), 6) # More sweep points
+int_time = np.around(np.logspace(np.log10(5e-6), np.log10(1e-3), 6), 6) # More sweep points
 
 # int_time = np.round(np.logspace(np.log10(1e-6), np.log10(1e-3), 5, base=10),6)
  
@@ -223,34 +225,52 @@ int_time_output_RT = calc_s21vsVrp(int_time, pin, adc_param_RT)
                 
 
 # %% SNR Calculation
+plt.close("all")
+n = 8
+col_shade = plt.cm.binary(np.linspace(0.1, 0.5, n))
+col_last = plt.cm.binary(np.linspace(1, 1, 1))
+col = np.concatenate([col_shade, col_last])
+
 SNR_CryoCMOS = calc_SNR(int_time_output_Cryo, pin, adc_param_CryoRX, int_time)
 SNR_RT = calc_SNR(int_time_output_RT, pin, adc_param_RT, int_time)
 
 SNR_fit_Cryocmos, t_min_CryoCMOS = SNR_Linear_Fitting(SNR_CryoCMOS)
 SNR_fit_RT, t_min_RT = SNR_Linear_Fitting(SNR_RT)
 
-plt.figure(figsize=(5,4), dpi=150)
-plt.loglog(SNR_fit_Cryocmos[2],SNR_fit_Cryocmos[3], label='SNR Cryo')
-plt.scatter(SNR_fit_Cryocmos[0],SNR_fit_Cryocmos[1])
-plt.loglog(SNR_fit_RT[2],SNR_fit_RT[3], label='SNR RT')
-plt.scatter(SNR_fit_RT[0],SNR_fit_RT[1])
+plt.figure(figsize=(8,3), dpi=150)
+plt.loglog(SNR_fit_Cryocmos[2],SNR_fit_Cryocmos[3], label='CMOS IC', linewidth=3, color='b')
+plt.scatter(SNR_fit_Cryocmos[0],SNR_fit_Cryocmos[1], color='b')
+plt.loglog(SNR_fit_RT[2],SNR_fit_RT[3], label='RT Rack', linewidth=3, color='r')
+plt.scatter(SNR_fit_RT[0],SNR_fit_RT[1], color='r')
 
 
-plt.text(1e-4, 1e0, ' Pin = '+str(pin)+' dBm \n t$_{min}$='+str(np.round(t_min_CryoCMOS*1e6,2))+'$\mu$S', fontsize=12)
-plt.text(1e-4, 1e-1, ' Pin = '+str(pin)+' dBm \n t$_{min}$='+str(np.round(t_min_RT*1e6,2))+'$\mu$S', fontsize=12)
+plt.text(1e-4, 2e0, 't$_{min, CMOS}$='+str(np.round(t_min_CryoCMOS*1e6,2))+'$\mu$S', fontsize=12)
+plt.text(1e-4, 2e-1, 't$_{min, Rack}$='+str(np.round(t_min_RT*1e6,2))+'$\mu$S', fontsize=12)
 
 plt.xlabel('t$_{int}$')
 plt.ylabel('SNR (a.u)') 
 plt.xlim([2e-6, 2e-3])
+plt.ylim([1e-1, 1e4])
+plt.grid(color=col[1], linestyle='--', linewidth=2)
+
 plt.legend()
 plt.show()
 
+print("--- %s seconds ---" % (time.time() - start_time))
+
 # %% SNR 
-# # 
-# df = pd.DataFrame([int_time, SNR, t_int_linspace, loglogfit])
-# df.to_csv('Data/Processed Data/5e-6 to 1e-3/CryoChip_SNR.csv')
-# # # df.O
+#
+def export_data(SNR_Data, data_name):
+    int_time = SNR_Data[0].tolist()
+    SNR = SNR_Data[1]
+    t_int_linspace = SNR_Data[2].tolist()
+    loglogfit = SNR_Data[3].tolist()
+    Data_arr = [int_time, SNR, t_int_linspace, loglogfit]
+    df = pd.DataFrame(Data_arr).transpose()
+    df.columns = ['int_time', 'SNR', 't_int_linspace', 'LogLogFit']
+    df.to_csv('Data/Processed Data/SNR Data/'+str(data_name)+'.csv', sep='\t')
+    return df
 
-# Make FIR filter with N taps 10% of 1ms
+df = export_data(SNR_fit_Cryocmos,'CryoCMOS_6points')
+df = export_data(SNR_fit_RT,'RTRack')
 
-    
