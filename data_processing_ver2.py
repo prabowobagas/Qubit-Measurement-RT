@@ -3,6 +3,8 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from lmfit.models import ConstantModel, GaussianModel
 import time
+from scipy.signal import kaiserord, lfilter, firwin, freqz
+
 
 class AlazarTech():
     def __init__(self,param):
@@ -41,7 +43,31 @@ class AlazarTech():
     def calc_RMS(self, signal):
         rms = np.sqrt(np.mean(np.power(signal,2)))
         return rms
+    
+    def filter_FIR(self, data):
+        nyq_rate = self.fs / 2
+        cutoff_hz = 1.7e6
+        n_tap = 2001
 
+        coeff = firwin(n_tap, cutoff_hz/nyq_rate)
+        filtered_data = lfilter(coeff, 1.0, data)
+        
+        # plt.figure()
+        # plt.plot(coeff, 'bo-', linewidth=2)
+        # plt.title('Filter Coefficients (%d taps)' % N)
+        # plt.grid(True)
+ 
+        # plt.figure()
+        # w, h = freqz(coeff, worN=8000)
+        # plt.plot((w/np.pi)*nyq_rate, np.absolute(h), linewidth=2)
+        # plt.xlabel('Frequency (Hz)')
+        # plt.ylabel('Gain')
+        # plt.title('Frequency Response')
+        # # plt.xlim(-0.05, 1.05)
+        # plt.grid(True)
+        
+        return filtered_data
+     
         
     def post_process_data(self, data):
         
@@ -56,6 +82,11 @@ class AlazarTech():
 
         IQ_volt = self.demodulate_data(recordA, recordB)
         
+        if self.name == 'CryoCMOS setting':
+            IQ_volt = self.filter_FIR(IQ_volt) # Filtering sequence
+            # IQ_volt = IQ_volt;
+        elif self.name == 'RT Rack setting':
+            IQ_volt = IQ_volt;
         IQ_avg = np.mean(IQ_volt)
         IQ_mag = np.abs(IQ_avg)
         
@@ -150,7 +181,7 @@ def calc_SNR(int_time_output, pin, Alazar_setting, int_time):
     
         S.append(abs(gauss_fit.values['height'])) # Calculate Signal Height
         # N.append(output) # Noise calculated by the RMS, first N data points
-        N.append(np.std(s21[75:-1])) # Noise calculated by the RMS, first N data points
+        N.append(np.std(s21[80:-2])) # Noise calculated by the RMS, first N data points #1111
         SNR.append((S[idx] / N[idx])**2)
         
         
@@ -158,7 +189,7 @@ def calc_SNR(int_time_output, pin, Alazar_setting, int_time):
     plt.legend()
     plt.xlabel('V$_{RP} [mV]$')
     plt.ylabel('S21 [dB]') 
-    plt.ylim([-30, 0])
+    # plt.ylim([-30, 0])
     plt.grid(color=col[1], linestyle='--', linewidth=2)
     
     SNR_output = [int_time, SNR]
@@ -209,30 +240,34 @@ adc_param_RT = {
 #------------------------------------
 start_time = time.time()
 
-pin = -40
+pin = -40 #-35,-40,-45
 vin_peak = 10 ** ((pin - 10) / 20) 
 
 int_time_output = []
 # int_time = [8e-6, 16e-6, 32e-6, 62e-6, 124e-6, 248e-6, 496e-6, 992e-6] # Good values for SNR calculation
-
 # int_time = np.around(np.logspace(np.log10(5e-6), np.log10(1e-3), 5), 6).tolist() # More sweep points
-int_time = np.around(np.logspace(np.log10(5e-6), np.log10(1e-3), 6), 6) # More sweep points
-
 # int_time = np.round(np.logspace(np.log10(1e-6), np.log10(1e-3), 5, base=10),6)
+
+
+int_time_Cryo = np.around(np.logspace(np.log10(10e-6), np.log10(1e-3), 6), 6) # More sweep points
+int_time_RT = np.around(np.logspace(np.log10(1e-6), np.log10(1e-3), 6), 6) # More sweep points
+# int_time = np.around(np.logspace(np.log10(5e-6), np.log10(1e-3), 3), 6) # More sweep points
+
+
  
-int_time_output_Cryo = calc_s21vsVrp(int_time, pin, adc_param_CryoRX)
-int_time_output_RT = calc_s21vsVrp(int_time, pin, adc_param_RT)
+int_time_output_Cryo = calc_s21vsVrp(int_time_Cryo, pin, adc_param_CryoRX)
+int_time_output_RT = calc_s21vsVrp(int_time_RT, pin, adc_param_RT)
                 
 
 # %% SNR Calculation
 plt.close("all")
-n = 8
+n = len(int_time_RT)
 col_shade = plt.cm.binary(np.linspace(0.1, 0.5, n))
 col_last = plt.cm.binary(np.linspace(1, 1, 1))
 col = np.concatenate([col_shade, col_last])
 
-SNR_CryoCMOS = calc_SNR(int_time_output_Cryo, pin, adc_param_CryoRX, int_time)
-SNR_RT = calc_SNR(int_time_output_RT, pin, adc_param_RT, int_time)
+SNR_CryoCMOS = calc_SNR(int_time_output_Cryo, pin, adc_param_CryoRX, int_time_Cryo)
+SNR_RT = calc_SNR(int_time_output_RT, pin, adc_param_RT, int_time_RT)
 
 SNR_fit_Cryocmos, t_min_CryoCMOS = SNR_Linear_Fitting(SNR_CryoCMOS)
 SNR_fit_RT, t_min_RT = SNR_Linear_Fitting(SNR_RT)
@@ -250,7 +285,7 @@ plt.text(1e-4, 2e-1, 't$_{min, Rack}$='+str(np.round(t_min_RT*1e6,2))+'$\mu$S', 
 plt.xlabel('t$_{int}$')
 plt.ylabel('SNR (a.u)') 
 plt.xlim([2e-6, 2e-3])
-plt.ylim([1e-1, 1e4])
+# plt.ylim([1e-1, 1e4])
 plt.grid(color=col[1], linestyle='--', linewidth=2)
 
 plt.legend()
@@ -258,19 +293,48 @@ plt.show()
 
 print("--- %s seconds ---" % (time.time() - start_time))
 
-# %% SNR 
+# %% SNR Data save
 #
-def export_data(SNR_Data, data_name):
-    int_time = SNR_Data[0].tolist()
-    SNR = SNR_Data[1]
-    t_int_linspace = SNR_Data[2].tolist()
-    loglogfit = SNR_Data[3].tolist()
-    Data_arr = [int_time, SNR, t_int_linspace, loglogfit]
-    df = pd.DataFrame(Data_arr).transpose()
-    df.columns = ['int_time', 'SNR', 't_int_linspace', 'LogLogFit']
-    df.to_csv('Data/Processed Data/SNR Data/'+str(data_name)+'.csv', sep='\t')
-    return df
+# def export_data(SNR_Data, data_name):
+#     int_time = SNR_Data[0].tolist()
+#     SNR = SNR_Data[1]
+#     t_int_linspace = SNR_Data[2].tolist()
+#     loglogfit = SNR_Data[3].tolist()
+#     Data_arr = [int_time, SNR, t_int_linspace, loglogfit]
+#     df = pd.DataFrame(Data_arr).transpose()
+#     df.columns = ['int_time', 'SNR', 't_int_linspace', 'LogLogFit']
+#     df.to_csv('Data/Processed Data/SNR Data/'+str(data_name)+'.csv', sep='\t')
+#     return df
 
-df = export_data(SNR_fit_Cryocmos,'CryoCMOS_6points')
-df = export_data(SNR_fit_RT,'RTRack')
+# df = export_data(SNR_fit_Cryocmos,'CryoCMOS_6points')
+# df = export_data(SNR_fit_RT,'RTRack')
+
+# %%
+# nyq_rate = 1e9 / 2
+# cutoff_hz = 1.55e6
+# n_tap = 2001
+# ripple_db = 40
+
+# coeff = firwin(n_tap, cutoff_hz/nyq_rate)
+# # filtered_data = lfilter(coeff, 1.0, data)
+
+# # plt.figure()
+# # plt.plot(coeff, 'bo-', linewidth=2)
+# # plt.title('Filter Coefficients (%d taps)' % N)
+# # plt.grid(True)
+ 
+# plt.figure()
+# w, h = freqz(coeff, worN=8000)
+# plt.plot((w/np.pi)*nyq_rate, np.absolute(h), linewidth=2)
+# plt.xlabel('Frequency (Hz)')
+# plt.ylabel('Gain')
+# plt.title('Frequency Response')
+# plt.xlim(0, 2e6)
+# plt.grid(True)
+
+
+# plt.figure()
+# plt.plot(coeff, 'bo-', linewidth=2)
+# # plt.title('Filter Coefficients (%d taps)' % N)
+# plt.grid(True)
 
